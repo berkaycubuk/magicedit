@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 
@@ -23,6 +24,32 @@ func moveCursor(row int, col int) {
 }
 
 func main() {
+	args := os.Args[1:]
+
+	var lines []string
+
+	if len(args) > 0 {
+		// load the file
+		f, err := os.Open(args[0])
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
+
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			lines = append(lines, scanner.Text())
+		}
+
+		fmt.Println(len(lines))
+		return
+	}
+
+	if len(lines) == 0 {
+		lines = append(lines, "")
+		lines = append(lines, "")
+	}
+
 	clearScreen()
 
 	oldState, err := term.MakeRaw(int(os.Stderr.Fd()))
@@ -36,10 +63,8 @@ func main() {
 		panic(err)
 	}
 
-	row := 0
-	col := 0
-
-	lineCount := 0
+	row := 1
+	col := 1
 
 	fmt.Println("MagicEdit v0.1.0")
 
@@ -60,43 +85,60 @@ func main() {
 		} else if mode == "INSERT" {
 			if buf[0] == 13 {
 				row += 1
-				col = 0
+				col = 1
+				if len(lines) <= row {
+					lines = append(lines, "")
+				}
+			} else if buf[0] == 27 {
 			} else {
-				fmt.Printf("%c", buf[0])
+				//fmt.Printf("%c", buf[0])
 				col += 1
+				lines[row] = lines[row] + string(buf[0])
 			}
 		}
 
 		if mode == "NORMAL" && buf[0] == 'j' {
 			row += 1
-			if row > height {
-				row = height
+			if row > len(lines) - 1 {
+				row = len(lines) - 1
+			}
+
+			if col > len(lines[row]) + 1 {
+				col = len(lines[row]) + 1
 			}
 		}
 
 		if mode == "NORMAL" && buf[0] == 'k' {
 			row -= 1
-			if row < 0 {
-				row = 0
+			if row < 1 {
+				row = 1
+			}
+
+			if col > len(lines[row]) + 1 {
+				col = len(lines[row]) + 1
 			}
 		}
 
 		if mode == "NORMAL" && buf[0] == 'l' {
 			col += 1
-			if col > width {
-				col = width
+			if col > len(lines[row]) {
+				col = len(lines[row])
 			}
 		}
 
 		if mode == "NORMAL" && buf[0] == 'h' {
 			col -= 1
-			if col < 0 {
-				col = 0
+			if col < 1 {
+				col = 1
 			}
 		}
 
-		if buf[0] == '\r' {
-			fmt.Printf("%c", '\n')
+		if mode == "NORMAL" && buf[0] == '0' {
+			col = 1
+		}
+
+		if mode == "NORMAL" && buf[0] == '$' {
+			col = len(lines[row])
 		}
 
 		if buf[0] == 'i' {
@@ -114,6 +156,4 @@ func main() {
 		printInfoBar(height, width, mode, row, col)
 		moveCursor(row, col)
 	}
-
-	clearScreen()
 }
