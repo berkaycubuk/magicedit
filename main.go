@@ -6,19 +6,39 @@
 package main
 
 import (
+	"bufio"
+	"os"
 	"strings"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 func main() {
+	var textBuffer strings.Builder
+
+	args := os.Args[1:]
+
+	if len(args) > 0 {
+		f, err := os.Open(args[0])
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
+		
+		scanner := bufio.NewScanner(f)
+		for scanner.Scan() {
+			textBuffer.WriteString(scanner.Text() + "\n")
+		}
+	}
+
 	screenWidth := 800
 	screenHeight := 450
+
+	viewOffsetY := 0
 
 	rl.InitWindow(int32(screenWidth), int32(screenHeight), "magicedit v0.1.0")
 	defer rl.CloseWindow()
 
-	var textBuffer strings.Builder
 	var commandBuffer strings.Builder
 	commandBufferCursorPos := 0
 
@@ -32,7 +52,9 @@ func main() {
 
 	isHoldingBackspace := false
 	isHoldingEnter := false
+	//isHoldingKey := false
 
+	//keyTimer := float32(0)
 	backspaceTimer := float32(0)
 	enterTimer := float32(0)
 
@@ -56,6 +78,11 @@ func main() {
 			closeWindow = true
 		}
 
+		viewOffsetY += int(rl.GetMouseWheelMove()) * 20
+		if viewOffsetY > 0 {
+			viewOffsetY = 0
+		}
+
 		deltaTime := rl.GetFrameTime()
 
 		pressedChar := rl.GetCharPressed()
@@ -74,6 +101,9 @@ func main() {
 					currentMode = "COMMAND"
 					commandBuffer.WriteString(":")
 					commandBufferCursorPos++
+				} else if pressedChar == 71 { // G
+					cursorPos = textBuffer.Len() - 1
+					cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
 				}
 			} else if currentMode == "COMMAND" {
 				commandBuffer.WriteRune(rune(pressedChar))
@@ -88,6 +118,27 @@ func main() {
 				currentMode = "NORMAL"
 				commandBuffer.Reset()
 				commandBufferCursorPos = 0
+			}
+		}
+
+		if currentMode == "NORMAL" {
+			if rl.IsKeyDown(rl.KeyH) && cursorPos > 0 {
+				cursorPos--
+				cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
+			}
+			if rl.IsKeyDown(rl.KeyL) && cursorPos < textBuffer.Len() {
+				cursorPos++
+				cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
+			}
+			if rl.IsKeyDown(rl.KeyK) && cursorLine > 0 {
+				cursorLine--
+				cursorCol = min(cursorCol, len(getLine(textBuffer.String(), cursorLine)))
+				cursorPos = getLineStartPos(textBuffer.String(), cursorLine) + cursorCol
+			}
+			if rl.IsKeyDown(rl.KeyJ) && cursorLine < getLineCount(textBuffer.String()) - 1 {
+				cursorLine++
+				cursorCol = min(cursorCol, len(getLine(textBuffer.String(), cursorLine)))
+				cursorPos = getLineStartPos(textBuffer.String(), cursorLine) + cursorCol
 			}
 		}
 
@@ -153,6 +204,11 @@ func main() {
 			isHoldingEnter = false
 		}
 
+		// Scrolling with cursor position
+		if cursorLine * lineHeight + 10 + (lineHeight * 5) >= screenHeight {
+			viewOffsetY = screenHeight - (cursorLine * lineHeight + 10 + (lineHeight * 5))
+		}
+
 		/* Draw Area */
 		rl.BeginDrawing()
 		rl.ClearBackground(rl.Black)
@@ -164,7 +220,7 @@ func main() {
 		for i, line := range lines {
 			if i == cursorLine {
                 cursorStartX := rl.MeasureTextEx(mainFont, line[:cursorCol], float32(fontSize), 1).X
-                cursorStartY := yOffset + float32(i)*float32(lineHeight)
+                cursorStartY := yOffset + float32(i)*float32(lineHeight) + float32(viewOffsetY)
 
 				if currentMode == "INSERT" {
 					rl.DrawRectangle(int32(cursorStartX+10), int32(cursorStartY), 2, int32(lineHeight), rl.White)
@@ -174,10 +230,11 @@ func main() {
 
 			}
 
-			rl.DrawTextEx(mainFont, line, rl.NewVector2(10, yOffset+float32(i)*float32(lineHeight)), float32(fontSize), 1, rl.White)
+			rl.DrawTextEx(mainFont, line, rl.NewVector2(10, float32(viewOffsetY) + yOffset+float32(i)*float32(lineHeight)), float32(fontSize), 1, rl.White)
 		}
 
 		// Bottom bar
+		rl.DrawRectangle(0, int32(screenHeight - 3 *lineHeight), int32(screenWidth), int32(3 *lineHeight), rl.NewColor(0, 117, 44, 150))
 		rl.DrawTextEx(mainFont, currentMode, rl.NewVector2(10, float32(screenHeight - (2 * lineHeight) - 10)), float32(fontSize), 1, rl.White)
 
 		// Command bar
