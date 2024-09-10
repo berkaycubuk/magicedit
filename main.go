@@ -1,3 +1,8 @@
+/*
+* magicedit v0.1.0
+*
+* Created by: Berkay Çubuk<berkay@berkaycubuk.com>
+ */
 package main
 
 import (
@@ -7,14 +12,17 @@ import (
 )
 
 func main() {
-	rl.InitWindow(800, 450, "magicedit v0.1.0")
+	screenWidth := 800
+	screenHeight := 450
+
+	rl.InitWindow(int32(screenWidth), int32(screenHeight), "magicedit v0.1.0")
 	defer rl.CloseWindow()
 
 	var textBuffer strings.Builder
-	/*
-	col := 0
-	row := 0
-	*/
+	var commandBuffer strings.Builder
+	commandBufferCursorPos := 0
+
+	currentMode := "NORMAL"
 
 	maxTextLength := 1000
 
@@ -31,26 +39,56 @@ func main() {
 	keyRepeatDelay := float32(0.5)
 	keyRepeatRate := float32(0.05)
 
+	wantToClose := false
+	closeWindow := false
+
 	fontSize := 20
 	lineHeight := fontSize
 	mainFont := rl.LoadFontEx("fonts/jetbrainsmono-regular.ttf", int32(fontSize), nil, 250)
 	defer rl.UnloadFont(mainFont)
 
+	rl.SetExitKey(rl.KeyNull)
+
 	rl.SetTargetFPS(60)
 
-	for !rl.WindowShouldClose() {
+	for !closeWindow {
+		if wantToClose || rl.WindowShouldClose() {
+			closeWindow = true
+		}
+
 		deltaTime := rl.GetFrameTime()
 
 		pressedChar := rl.GetCharPressed()
 
 		for pressedChar > 0 {
-			if textBuffer.Len() < maxTextLength {
-				textBuffer.WriteRune(rune(pressedChar))
-				cursorPos++
-				cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
+			if currentMode == "INSERT" {
+				if textBuffer.Len() < maxTextLength {
+					textBuffer.WriteRune(rune(pressedChar))
+					cursorPos++
+					cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
+				}
+			} else if currentMode == "NORMAL" {
+				if pressedChar == 105 { // i
+					currentMode = "INSERT"
+				} else if pressedChar == 58 { // :
+					currentMode = "COMMAND"
+					commandBuffer.WriteString(":")
+					commandBufferCursorPos++
+				}
+			} else if currentMode == "COMMAND" {
+				commandBuffer.WriteRune(rune(pressedChar))
+				commandBufferCursorPos++
 			}
 
 			pressedChar = rl.GetCharPressed()
+		}
+
+		if rl.IsKeyPressed(rl.KeyEscape) {
+			if currentMode == "INSERT" || currentMode == "COMMAND" {
+				currentMode = "NORMAL"
+				commandBuffer.Reset()
+				commandBufferCursorPos = 0
+			}
 		}
 
 		if rl.IsKeyDown(rl.KeyBackspace) {
@@ -88,6 +126,12 @@ func main() {
 
 		if rl.IsKeyDown(rl.KeyEnter) {
 			if !isHoldingEnter {
+				if currentMode == "COMMAND" {
+					if commandBuffer.String() == ":q" {
+						wantToClose = true
+					}
+				}
+
 				textBuffer.WriteString("\n")
 				cursorPos++
 				cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
@@ -119,22 +163,25 @@ func main() {
 		
 		for i, line := range lines {
 			if i == cursorLine {
-                cursorX := rl.MeasureTextEx(mainFont, line[:cursorCol], float32(fontSize), 1).X
-                cursorY := yOffset + float32(i)*float32(lineHeight)
-				rl.DrawRectangle(int32(cursorX+10), int32(cursorY), 2, int32(lineHeight), rl.White)
+                cursorStartX := rl.MeasureTextEx(mainFont, line[:cursorCol], float32(fontSize), 1).X
+                cursorStartY := yOffset + float32(i)*float32(lineHeight)
+
+				if currentMode == "INSERT" {
+					rl.DrawRectangle(int32(cursorStartX+10), int32(cursorStartY), 2, int32(lineHeight), rl.White)
+				} else if currentMode == "NORMAL" {
+					rl.DrawRectangle(int32(cursorStartX+10), int32(cursorStartY), 10, int32(lineHeight), rl.NewColor(255,255,255,50))
+				}
+
 			}
 
 			rl.DrawTextEx(mainFont, line, rl.NewVector2(10, yOffset+float32(i)*float32(lineHeight)), float32(fontSize), 1, rl.White)
 		}
 
-		/*
-		// cursor
-		cursorPosMeasured := rl.MeasureTextEx(mainFont, textStr[:cursorPos], float32(fontSize), 1)
-		rl.DrawRectangle(int32(cursorPosMeasured.X), int32(cursorPosMeasured.Y), 2, int32(fontSize), rl.White)
+		// Bottom bar
+		rl.DrawTextEx(mainFont, currentMode, rl.NewVector2(10, float32(screenHeight - (2 * lineHeight) - 10)), float32(fontSize), 1, rl.White)
 
-		// text
-		rl.DrawTextEx(mainFont, textStr, rl.NewVector2(10, 10), float32(fontSize), 1, rl.White)
-		*/
+		// Command bar
+		rl.DrawTextEx(mainFont, commandBuffer.String(), rl.NewVector2(10, float32(screenHeight - lineHeight - 10)), float32(fontSize), 1, rl.White)
 
 		rl.EndDrawing()
 		/* Draw Area */
