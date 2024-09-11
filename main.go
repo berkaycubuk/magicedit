@@ -7,6 +7,7 @@ package main
 
 import (
 	"bufio"
+	"log"
 	"os"
 	"strings"
 
@@ -15,6 +16,7 @@ import (
 
 func main() {
 	var textBuffer strings.Builder
+	var filename string
 
 	args := os.Args[1:]
 
@@ -29,6 +31,8 @@ func main() {
 		for scanner.Scan() {
 			textBuffer.WriteString(scanner.Text() + "\n")
 		}
+
+		filename = args[0]
 	}
 
 	screenWidth := 800
@@ -44,20 +48,12 @@ func main() {
 
 	currentMode := "NORMAL"
 
-	maxTextLength := 1000
-
 	cursorPos := 0
 	cursorLine := 0
-    cursorCol := 0
+	cursorCol := 0
 
-	isHoldingBackspace := false
-	isHoldingEnter := false
-	//isHoldingKey := false
-
-	//keyTimer := float32(0)
-	backspaceTimer := float32(0)
-	enterTimer := float32(0)
-
+	holdingKey := ""
+	keyTimer := float32(0)
 	keyRepeatDelay := float32(0.5)
 	keyRepeatRate := float32(0.05)
 
@@ -89,14 +85,20 @@ func main() {
 
 		for pressedChar > 0 {
 			if currentMode == "INSERT" {
-				if textBuffer.Len() < maxTextLength {
-					textBuffer.WriteRune(rune(pressedChar))
-					cursorPos++
-					cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
-				}
+				textStr := textBuffer.String()
+				textStr = textStr[:cursorPos] + string(pressedChar) + textStr[cursorPos:]
+				textBuffer.Reset()
+				textBuffer.WriteString(textStr)
+				cursorPos++
+				cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
 			} else if currentMode == "NORMAL" {
 				if pressedChar == 105 { // i
 					currentMode = "INSERT"
+				} else if pressedChar == 97 { // a
+					// TODO: Slice out of bounds error
+					currentMode = "INSERT"
+					cursorPos++
+					cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
 				} else if pressedChar == 58 { // :
 					currentMode = "COMMAND"
 					commandBuffer.WriteString(":")
@@ -123,86 +125,153 @@ func main() {
 
 		if currentMode == "NORMAL" {
 			if rl.IsKeyDown(rl.KeyH) && cursorPos > 0 {
-				cursorPos--
-				cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
-			}
-			if rl.IsKeyDown(rl.KeyL) && cursorPos < textBuffer.Len() {
-				cursorPos++
-				cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
-			}
-			if rl.IsKeyDown(rl.KeyK) && cursorLine > 0 {
-				cursorLine--
-				cursorCol = min(cursorCol, len(getLine(textBuffer.String(), cursorLine)))
-				cursorPos = getLineStartPos(textBuffer.String(), cursorLine) + cursorCol
-			}
-			if rl.IsKeyDown(rl.KeyJ) && cursorLine < getLineCount(textBuffer.String()) - 1 {
-				cursorLine++
-				cursorCol = min(cursorCol, len(getLine(textBuffer.String(), cursorLine)))
-				cursorPos = getLineStartPos(textBuffer.String(), cursorLine) + cursorCol
-			}
-		}
-
-		if rl.IsKeyDown(rl.KeyBackspace) {
-			if !isHoldingBackspace {
-				if cursorPos > 0 {
-					textStr := textBuffer.String()
-					textStr = textStr[:cursorPos - 1] + textStr[cursorPos:]
-					textBuffer.Reset()
-					textBuffer.WriteString(textStr)
+				if holdingKey != "h" {
 					cursorPos--
 					cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
-				}
-
-				isHoldingBackspace = true
-				backspaceTimer = 0
-			} else {
-				backspaceTimer += deltaTime
-				if backspaceTimer > keyRepeatDelay {
-					if backspaceTimer - keyRepeatDelay > keyRepeatRate {
-						if cursorPos > 0 {
-							textStr := textBuffer.String()
-							textStr = textStr[:cursorPos - 1] + textStr[cursorPos:]
-							textBuffer.Reset()
-							textBuffer.WriteString(textStr)
+					holdingKey = "h"
+					keyTimer = 0
+				} else {
+					keyTimer += deltaTime
+					if keyTimer > keyRepeatDelay {
+						if keyTimer - keyRepeatDelay > keyRepeatRate {
 							cursorPos--
 							cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
+							keyTimer = keyRepeatDelay
 						}
-						backspaceTimer = keyRepeatDelay
 					}
 				}
-			}
-		} else {
-			isHoldingBackspace = false
-		}
-
-		if rl.IsKeyDown(rl.KeyEnter) {
-			if !isHoldingEnter {
-				if currentMode == "COMMAND" {
-					if commandBuffer.String() == ":q" {
-						wantToClose = true
+			} else if rl.IsKeyDown(rl.KeyL) && cursorPos < textBuffer.Len() {
+				if holdingKey != "l" {
+					cursorPos++
+					cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
+					holdingKey = "l"
+					keyTimer = 0
+				} else {
+					keyTimer += deltaTime
+					if keyTimer > keyRepeatDelay {
+						if keyTimer - keyRepeatDelay > keyRepeatRate {
+							cursorPos++
+							cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
+							keyTimer = keyRepeatDelay
+						}
 					}
 				}
-
-				textBuffer.WriteString("\n")
-				cursorPos++
-				cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
-
-				isHoldingEnter = true
-				enterTimer = 0
+			} else if rl.IsKeyDown(rl.KeyK) && cursorLine > 0 {
+				if holdingKey != "k" {
+					cursorLine--
+					cursorCol = min(cursorCol, len(getLine(textBuffer.String(), cursorLine)))
+					cursorPos = getLineStartPos(textBuffer.String(), cursorLine) + cursorCol
+					holdingKey = "k"
+					keyTimer = 0
+				} else {
+					keyTimer += deltaTime
+					if keyTimer > keyRepeatDelay {
+						if keyTimer - keyRepeatDelay > keyRepeatRate {
+							cursorLine--
+							cursorCol = min(cursorCol, len(getLine(textBuffer.String(), cursorLine)))
+							cursorPos = getLineStartPos(textBuffer.String(), cursorLine) + cursorCol
+							keyTimer = keyRepeatDelay
+						}
+					}
+				}
+			} else if rl.IsKeyDown(rl.KeyJ) && cursorLine < getLineCount(textBuffer.String()) - 1 {
+				if holdingKey != "j" {
+					cursorLine++
+					cursorCol = min(cursorCol, len(getLine(textBuffer.String(), cursorLine)))
+					cursorPos = getLineStartPos(textBuffer.String(), cursorLine) + cursorCol
+					holdingKey = "j"
+					keyTimer = 0
+				} else {
+					keyTimer += deltaTime
+					if keyTimer > keyRepeatDelay {
+						if keyTimer - keyRepeatDelay > keyRepeatRate {
+							cursorLine++
+							cursorCol = min(cursorCol, len(getLine(textBuffer.String(), cursorLine)))
+							cursorPos = getLineStartPos(textBuffer.String(), cursorLine) + cursorCol
+							keyTimer = keyRepeatDelay
+						}
+					}
+				}
 			} else {
-				enterTimer += deltaTime
-				if enterTimer > keyRepeatDelay {
-					if enterTimer - keyRepeatDelay > keyRepeatRate {
-						textBuffer.WriteString("\n")
-						cursorPos++
-						cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
-						enterTimer = keyRepeatDelay
+				holdingKey = ""
+			}
+		} else if currentMode == "COMMAND" {
+			if rl.IsKeyPressed(rl.KeyEnter) {
+				if commandBuffer.String() == ":q" {
+					wantToClose = true
+				} else if commandBuffer.String() == ":wq" {
+					// Save file
+					if filename != "" {
+						err := os.WriteFile(filename, []byte(textBuffer.String()), 0755)
+						if err != nil {
+							log.Fatal(err)
+						}
 					}
+
+					wantToClose = true
 				}
 			}
-		} else {
-			isHoldingEnter = false
+		} else if currentMode == "INSERT" {
+			if rl.IsKeyDown(rl.KeyBackspace) {
+				if holdingKey != "backspace" {
+					if cursorPos > 0 {
+						textStr := textBuffer.String()
+						textStr = textStr[:cursorPos - 1] + textStr[cursorPos:]
+						textBuffer.Reset()
+						textBuffer.WriteString(textStr)
+						cursorPos--
+						cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
+					}
+
+					holdingKey = "backspace"
+					keyTimer = 0
+				} else {
+					keyTimer += deltaTime
+					if keyTimer > keyRepeatDelay {
+						if keyTimer - keyRepeatDelay > keyRepeatRate {
+							if cursorPos > 0 {
+								textStr := textBuffer.String()
+								textStr = textStr[:cursorPos - 1] + textStr[cursorPos:]
+								textBuffer.Reset()
+								textBuffer.WriteString(textStr)
+								cursorPos--
+								cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
+							}
+							keyTimer = keyRepeatDelay
+						}
+					}
+				}
+			} else if rl.IsKeyDown(rl.KeyEnter) {
+				if holdingKey != "enter" {
+					textStr := textBuffer.String()
+					textStr = textStr[:cursorPos] + string("\n") + textStr[cursorPos:]
+					textBuffer.Reset()
+					textBuffer.WriteString(textStr)
+					cursorPos++
+					cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
+
+					holdingKey = "enter"
+					keyTimer = 0
+				} else {
+					keyTimer += deltaTime
+					if keyTimer > keyRepeatDelay {
+						if keyTimer - keyRepeatDelay > keyRepeatRate {
+							textStr := textBuffer.String()
+							textStr = textStr[:cursorPos] + string("\n") + textStr[cursorPos:]
+							textBuffer.Reset()
+							textBuffer.WriteString(textStr)
+							cursorPos++
+							cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
+
+							keyTimer = keyRepeatDelay
+						}
+					}
+				}
+			} else {
+				holdingKey = ""
+			}
 		}
+
 
 		// Scrolling with cursor position
 		if cursorLine * lineHeight + 10 + (lineHeight * 5) >= screenHeight {
