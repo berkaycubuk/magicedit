@@ -2,13 +2,14 @@
 * magicedit v0.1.0
 *
 * Created by: Berkay Çubuk<berkay@berkaycubuk.com>
-*/
+ */
 package main
 
 import (
 	"bufio"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
@@ -41,6 +42,7 @@ func main() {
 	viewOffsetY := 0
 	viewOffsetX := 0
 
+	tabSpace := 3
 	rl.SetConfigFlags(rl.FlagWindowResizable)
 
 	rl.InitWindow(int32(screenWidth), int32(screenHeight), "magicedit v0.1.0")
@@ -113,6 +115,26 @@ func main() {
 				} else if pressedChar == 71 { // G
 					cursorPos = textBuffer.Len() - 1
 					cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
+				} else if pressedChar == 111 {
+					// TODO: adds the new line to the top when used at the bottom
+					currentMode = "INSERT"
+					cursorLine++
+					cursorCol = 0
+					cursorPos = getLineStartPos(textBuffer.String(), cursorLine)
+
+					textStr := textBuffer.String()
+					textStr = textStr[:cursorPos] + "\n" + textStr[cursorPos:]
+					textBuffer.Reset()
+					textBuffer.WriteString(textStr)
+				} else if pressedChar == 79 {
+					currentMode = "INSERT"
+					cursorCol = 0
+					cursorPos = getLineStartPos(textBuffer.String(), cursorLine)
+
+					textStr := textBuffer.String()
+					textStr = textStr[:cursorPos] + "\n" + textStr[cursorPos:]
+					textBuffer.Reset()
+					textBuffer.WriteString(textStr)
 				}
 			} else if currentMode == "COMMAND" {
 				commandBuffer.WriteRune(rune(pressedChar))
@@ -202,6 +224,7 @@ func main() {
 			} else {
 				holdingKey = ""
 			}
+
 		} else if currentMode == "COMMAND" {
 			if rl.IsKeyPressed(rl.KeyEnter) {
 				if commandBuffer.String() == ":q" {
@@ -274,11 +297,38 @@ func main() {
 						}
 					}
 				}
+			} else if rl.IsKeyDown(rl.KeyTab) {
+				if holdingKey != "tab" {
+					textStr := textBuffer.String()
+					textStr = textStr[:cursorPos] + string("\t") + textStr[cursorPos:]
+					textBuffer.Reset()
+					textBuffer.WriteString(textStr)
+					cursorPos++
+					cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
+
+					holdingKey = "tab"
+					keyTimer = 0
+				} else {
+					keyTimer += deltaTime
+					if keyTimer > keyRepeatDelay {
+						if keyTimer - keyRepeatDelay > keyRepeatRate {
+							textStr := textBuffer.String()
+							textStr = textStr[:cursorPos] + string("\t") + textStr[cursorPos:]
+							textBuffer.Reset()
+							textBuffer.WriteString(textStr)
+							cursorPos++
+							cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
+
+							keyTimer = keyRepeatDelay
+						}
+					}
+				}
 			} else {
 				holdingKey = ""
 			}
 		}
 
+		lineNumberOffset := 4 * 10 // 4 for length
 
 		// Scrolling with cursor position
 		if cursorLine * lineHeight + 10 + (lineHeight * 5) >= screenHeight {
@@ -287,8 +337,9 @@ func main() {
 			viewOffsetY = 0
 		}
 
-		if (cursorCol + 2) * 10 + 10 >= screenWidth {
-			viewOffsetX = screenWidth - ((cursorCol + 2) * 10 + 10)
+		// TODO: this does not count the tab size
+		if (cursorCol + 2) * 10 + 10 >= screenWidth - lineNumberOffset {
+			viewOffsetX = (screenWidth - lineNumberOffset) - ((cursorCol + 2) * 10 + 10)
 		} else {
 			viewOffsetX = 0
 		}
@@ -302,24 +353,41 @@ func main() {
 		yOffset := float32(10) // Y offset for the text
 		
 		for i, line := range lines {
+			xOffset := 0
+			tabOffset := 0
+			for index, char := range line {
+				rl.DrawTextEx(mainFont, string(char), rl.NewVector2(10 + float32(xOffset) + float32(viewOffsetX) + float32(lineNumberOffset), float32(viewOffsetY) + yOffset+float32(i)*float32(lineHeight)), float32(fontSize), 1, rl.White)
+				
+				if string(char) == "\t" {
+					rl.DrawTextEx(mainFont, "»", rl.NewVector2(10 + float32(xOffset) + float32(viewOffsetX) + float32(lineNumberOffset), float32(viewOffsetY) + yOffset+float32(i)*float32(lineHeight)), float32(fontSize), 1, rl.NewColor(255,255,255,60))
+
+					xOffset += tabSpace * 10
+					if index < cursorCol {
+						tabOffset += (tabSpace - 1) * 10
+					}
+				} else {
+					xOffset += 10
+				}
+			}
+
+			// Line numbers
+			rl.DrawTextEx(mainFont, strconv.Itoa(i + 1), rl.NewVector2(10, float32(viewOffsetY) + yOffset+float32(i)*float32(lineHeight)), float32(fontSize), 1, rl.NewColor(255,255,255,60))
+
 			if i == cursorLine {
-                cursorStartX := rl.MeasureTextEx(mainFont, line[:cursorCol], float32(fontSize), 1).X + float32(viewOffsetX)
+                cursorStartX := rl.MeasureTextEx(mainFont, line[:cursorCol], float32(fontSize), 1).X + float32(viewOffsetX) + float32(lineNumberOffset)
                 cursorStartY := yOffset + float32(i)*float32(lineHeight) + float32(viewOffsetY)
 
 				if currentMode == "INSERT" {
-					rl.DrawRectangle(int32(cursorStartX+10), int32(cursorStartY), 2, int32(lineHeight), rl.White)
+					rl.DrawRectangle(int32(cursorStartX+10) + int32(tabOffset), int32(cursorStartY), 2, int32(lineHeight), rl.White)
 				} else if currentMode == "NORMAL" {
-					rl.DrawRectangle(int32(cursorStartX+10), int32(cursorStartY), 10, int32(lineHeight), rl.NewColor(255,255,255,50))
+					rl.DrawRectangle(int32(cursorStartX+10) + int32(tabOffset), int32(cursorStartY), 10, int32(lineHeight), rl.NewColor(255,255,255,50))
 				}
-
 			}
-
-			rl.DrawTextEx(mainFont, line, rl.NewVector2(10 + float32(viewOffsetX), float32(viewOffsetY) + yOffset+float32(i)*float32(lineHeight)), float32(fontSize), 1, rl.White)
 		}
 
 		// Bottom bar
-		rl.DrawRectangle(0, int32(screenHeight - 3 *lineHeight), int32(screenWidth), int32(3 *lineHeight), rl.NewColor(0, 117, 44, 150))
-		rl.DrawTextEx(mainFont, currentMode, rl.NewVector2(10, float32(screenHeight - (2 * lineHeight) - 10)), float32(fontSize), 1, rl.White)
+		rl.DrawRectangle(0, int32(screenHeight - 2 *lineHeight), int32(screenWidth), int32(3 *lineHeight), rl.NewColor(0, 117, 44, 150))
+		rl.DrawTextEx(mainFont, currentMode, rl.NewVector2(float32(screenWidth- 10 - (10 * len(currentMode))), float32(screenHeight - lineHeight - 10)), float32(fontSize), 1, rl.White)
 
 		// Command bar
 		rl.DrawTextEx(mainFont, commandBuffer.String(), rl.NewVector2(10, float32(screenHeight - lineHeight - 10)), float32(fontSize), 1, rl.White)
@@ -330,30 +398,30 @@ func main() {
 }
 
 func getCursorLineCol(text string, pos int) (line, col int) {
-    lines := strings.Split(text[:pos], "\n")
-    return len(lines) - 1, len(lines[len(lines)-1])
+	lines := strings.Split(text[:pos], "\n")
+	return len(lines) - 1, len(lines[len(lines)-1])
 }
 
 func getLine(text string, line int) string {
-    lines := strings.Split(text, "\n")
-    if line < len(lines) {
-        return lines[line]
-    }
-    return ""
+	lines := strings.Split(text, "\n")
+	if line < len(lines) {
+		return lines[line]
+	}
+	return ""
 }
 
 func getLineStartPos(text string, line int) int {
-    lines := strings.Split(text, "\n")
-    if line < len(lines) {
-        start := 0
-        for i := 0; i < line; i++ {
-            start += len(lines[i]) + 1 // +1 for newline character
-        }
-        return start
-    }
-    return 0
+	lines := strings.Split(text, "\n")
+	if line < len(lines) {
+		start := 0
+		for i := 0; i < line; i++ {
+			start += len(lines[i]) + 1 // +1 for newline character
+		}
+		return start
+	}
+	return 0
 }
 
 func getLineCount(text string) int {
-    return len(strings.Split(text, "\n"))
+	return len(strings.Split(text, "\n"))
 }
