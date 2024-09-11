@@ -2,7 +2,8 @@
 * magicedit v0.1.0
 *
 * Created by: Berkay Çubuk<berkay@berkaycubuk.com>
- */
+*/
+
 package main
 
 import (
@@ -74,6 +75,8 @@ func main() {
 
 	rl.SetTargetFPS(60)
 
+	var lastPressedChar int32
+
 	for !closeWindow {
 		if wantToClose || rl.WindowShouldClose() {
 			closeWindow = true
@@ -106,8 +109,9 @@ func main() {
 				} else if pressedChar == 97 { // a
 					// TODO: Slice out of bounds error
 					currentMode = "INSERT"
-					cursorPos++
-					cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
+					//cursorCol++
+					//cursorPos++
+					//cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
 				} else if pressedChar == 58 { // :
 					currentMode = "COMMAND"
 					commandBuffer.WriteString(":")
@@ -115,7 +119,7 @@ func main() {
 				} else if pressedChar == 71 { // G
 					cursorPos = textBuffer.Len() - 1
 					cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
-				} else if pressedChar == 111 {
+				} else if pressedChar == 111 { // o
 					// TODO: adds the new line to the top when used at the bottom
 					currentMode = "INSERT"
 					cursorLine++
@@ -126,7 +130,7 @@ func main() {
 					textStr = textStr[:cursorPos] + "\n" + textStr[cursorPos:]
 					textBuffer.Reset()
 					textBuffer.WriteString(textStr)
-				} else if pressedChar == 79 {
+				} else if pressedChar == 79 { // O
 					currentMode = "INSERT"
 					cursorCol = 0
 					cursorPos = getLineStartPos(textBuffer.String(), cursorLine)
@@ -135,12 +139,26 @@ func main() {
 					textStr = textStr[:cursorPos] + "\n" + textStr[cursorPos:]
 					textBuffer.Reset()
 					textBuffer.WriteString(textStr)
+				} else if lastPressedChar == pressedChar {
+					if pressedChar == 103 { // g
+						cursorPos = 0
+						cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
+					} else if pressedChar == 100 { // d
+						cursorPos = getLineStartPos(textBuffer.String(), cursorLine)
+						nextLineStartPos := getLineStartPos(textBuffer.String(), cursorLine + 1)
+
+						textStr := textBuffer.String()
+						textStr = textStr[:cursorPos] + textStr[nextLineStartPos:]
+						textBuffer.Reset()
+						textBuffer.WriteString(textStr)
+					}
 				}
 			} else if currentMode == "COMMAND" {
 				commandBuffer.WriteRune(rune(pressedChar))
 				commandBufferCursorPos++
 			}
 
+			lastPressedChar = pressedChar
 			pressedChar = rl.GetCharPressed()
 		}
 
@@ -224,7 +242,6 @@ func main() {
 			} else {
 				holdingKey = ""
 			}
-
 		} else if currentMode == "COMMAND" {
 			if rl.IsKeyPressed(rl.KeyEnter) {
 				if commandBuffer.String() == ":q" {
