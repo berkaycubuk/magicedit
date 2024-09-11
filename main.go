@@ -2,7 +2,7 @@
 * magicedit v0.1.0
 *
 * Created by: Berkay Çubuk<berkay@berkaycubuk.com>
- */
+*/
 package main
 
 import (
@@ -39,6 +39,9 @@ func main() {
 	screenHeight := 450
 
 	viewOffsetY := 0
+	viewOffsetX := 0
+
+	rl.SetConfigFlags(rl.FlagWindowResizable)
 
 	rl.InitWindow(int32(screenWidth), int32(screenHeight), "magicedit v0.1.0")
 	defer rl.CloseWindow()
@@ -78,6 +81,10 @@ func main() {
 		if viewOffsetY > 0 {
 			viewOffsetY = 0
 		}
+
+		// Update window size
+		screenWidth = rl.GetScreenWidth()
+		screenHeight = rl.GetScreenHeight()
 
 		deltaTime := rl.GetFrameTime()
 
@@ -276,6 +283,14 @@ func main() {
 		// Scrolling with cursor position
 		if cursorLine * lineHeight + 10 + (lineHeight * 5) >= screenHeight {
 			viewOffsetY = screenHeight - (cursorLine * lineHeight + 10 + (lineHeight * 5))
+		} else {
+			viewOffsetY = 0
+		}
+
+		if (cursorCol + 2) * 10 + 10 >= screenWidth {
+			viewOffsetX = screenWidth - ((cursorCol + 2) * 10 + 10)
+		} else {
+			viewOffsetX = 0
 		}
 
 		/* Draw Area */
@@ -288,7 +303,7 @@ func main() {
 		
 		for i, line := range lines {
 			if i == cursorLine {
-                cursorStartX := rl.MeasureTextEx(mainFont, line[:cursorCol], float32(fontSize), 1).X
+                cursorStartX := rl.MeasureTextEx(mainFont, line[:cursorCol], float32(fontSize), 1).X + float32(viewOffsetX)
                 cursorStartY := yOffset + float32(i)*float32(lineHeight) + float32(viewOffsetY)
 
 				if currentMode == "INSERT" {
@@ -299,7 +314,7 @@ func main() {
 
 			}
 
-			rl.DrawTextEx(mainFont, line, rl.NewVector2(10, float32(viewOffsetY) + yOffset+float32(i)*float32(lineHeight)), float32(fontSize), 1, rl.White)
+			rl.DrawTextEx(mainFont, line, rl.NewVector2(10 + float32(viewOffsetX), float32(viewOffsetY) + yOffset+float32(i)*float32(lineHeight)), float32(fontSize), 1, rl.White)
 		}
 
 		// Bottom bar
