@@ -2,7 +2,7 @@
 * magicedit v0.1.0
 *
 * Created by: Berkay Çubuk<berkay@berkaycubuk.com>
-*/
+ */
 
 package main
 
@@ -12,6 +12,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"unicode"
 
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
@@ -107,11 +108,13 @@ func main() {
 				if pressedChar == 105 { // i
 					currentMode = "INSERT"
 				} else if pressedChar == 97 { // a
-					// TODO: Slice out of bounds error
 					currentMode = "INSERT"
-					//cursorCol++
-					//cursorPos++
-					//cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
+					textStr := textBuffer.String()
+					if string(textStr[cursorPos + 1]) != "\n" && string(textStr[cursorPos]) != "\n" {
+						cursorCol++
+						cursorPos++
+						cursorLine, cursorCol = getCursorLineCol(textBuffer.String(), cursorPos)
+					}
 				} else if pressedChar == 58 { // :
 					currentMode = "COMMAND"
 					commandBuffer.WriteString(":")
@@ -254,8 +257,31 @@ func main() {
 							log.Fatal(err)
 						}
 					}
-
 					wantToClose = true
+				} else {
+					// check is it all numeric
+					isNumeric := true
+					for _, r := range commandBuffer.String()[1:] {
+						if !unicode.IsDigit(r) {
+							isNumeric = false
+							break
+						}
+					}
+
+					if isNumeric {
+						desiredLine, _ := strconv.Atoi(commandBuffer.String()[1:])
+						lineCount := getLineCount(textBuffer.String())
+						desiredLine-- // lines mapped like arrays, starts with 0
+
+						if desiredLine <= lineCount && desiredLine >= 0 {
+							cursorLine = desiredLine
+							cursorCol = 0
+							cursorPos = getLineStartPos(textBuffer.String(), cursorLine)
+						}
+					}
+
+					commandBuffer.Reset()
+					currentMode = "NORMAL"
 				}
 			}
 		} else if currentMode == "INSERT" {
